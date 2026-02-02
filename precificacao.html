@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de PRecificação de Pratos - V8 (Full Backup)</title>
+    <style>
+        :root { --primary: #2c3e50; --secondary: #27ae60; --danger: #c0392b; --info: #2980b9; --light: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background: #eef2f3; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: var(--primary); border-bottom: 3px solid var(--secondary); padding-bottom: 10px; margin-top: 0; }
+        
+        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; gap: 10px; flex-wrap: wrap; }
+        .backup-controls { display: flex; gap: 10px; }
+        
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 15px; cursor: pointer; border: none; background: #dcdde1; font-weight: bold; border-radius: 5px; transition: 0.3s; }
+        .tab-btn.active { background: var(--secondary); color: white; }
+        
+        .content { display: none; }
+        .content.active { display: block; }
+        .form-section { background: var(--light); padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+        .grid-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; align-items: end; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th { background: var(--primary); color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #eee; }
+        
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; display: inline-flex; align-items: center; gap: 5px; }
+        .btn-add { background: var(--secondary); }
+        .btn-save { background: var(--info); }
+        .btn-import { background: #f39c12; }
+        .btn-pdf { background: #673ab7; }
+        .btn-del { background: var(--danger); }
+        
+        .card-prato { border: 2px solid #ddd; padding: 20px; border-radius: 10px; margin-bottom: 30px; background: #fff; page-break-inside: avoid; }
+        .header-prato { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--light); margin-bottom: 15px; }
+        
+        .markup-box { background: #e8f4fd; padding: 15px; border-radius: 8px; border: 1px solid #b8daff; margin-top: 15px; display: inline-block; }
+        .venda-box { background: var(--primary); color: white; padding: 15px; border-radius: 8px; margin-top: 15px; display: inline-block; float: right; }
+        
+        input, select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        .input-inline { width: 80px !important; display: inline; font-weight: bold; }
+
+        #file-import { display: none; }
+
+        @media print {
+            .top-bar, .tabs, .form-section, .btn, th:last-child, td:last-child, .grid-inputs { display: none !important; }
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; border: none; width: 100%; max-width: 100%; }
+            .content { display: block !important; }
+            #insumos, #montar { margin-bottom: 50px; }
+            h3 { border-bottom: 2px solid #000; padding-bottom: 5px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="top-bar">
+        <div class="backup-controls">
+            <button class="btn btn-save" onclick="exportarTudo()">💾 Exportar Backup Total</button>
+            <label for="file-import" class="btn btn-import">📂 Importar Backup</label>
+            <input type="file" id="file-import" accept=".json" onchange="importarTudo(event)">
+        </div>
+        <button class="btn btn-pdf" onclick="window.print()">🖨️ Imprimir Relatório PDF</button>
+    </div>
+
+    <h1>Precificação de Pratos</h1>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('insumos')">1. Insumos</button>
+        <button class="tab-btn" onclick="showTab('montar')">2. Montar Pratos</button>
+        <button class="tab-btn" onclick="showTab('resumo')">3. Resumo Geral</button>
+    </div>
+
+    <div id="insumos" class="content active">
+        <div class="form-section">
+            <h3>Cadastrar Novo Insumo</h3>
+            <div class="grid-inputs">
+                <div><label>Nome Item</label><input type="text" id="ing-nome"></div>
+                <div><label>Unidade</label><input type="text" id="ing-un" placeholder="KG, UN, LT"></div>
+                <div><label>Preço Pago</label><input type="number" id="ing-preco" step="0.01"></div>
+                <div><label>Qtd na Emb.</label><input type="number" id="ing-qtd-base" step="0.001"></div>
+                <button class="btn btn-add" onclick="addInsumo()">Cadastrar</button>
+            </div>
+        </div>
+        <table>
+            <thead><tr><th>Insumo</th><th>Unid.</th><th>Preço Emb.</th><th>Custo Unit.</th><th>Ações</th></tr></thead>
+            <tbody id="corpo-insumos"></tbody>
+        </table>
+    </div>
+
+    <div id="montar" class="content">
+        <div class="form-section">
+            <div class="grid-inputs" style="grid-template-columns: 3fr 1fr;">
+                <input type="text" id="p-nome" placeholder="Nome do Prato (Ex: Feijão Tropeiro)">
+                <button class="btn btn-add" onclick="criarPrato()">Criar Nova Ficha</button>
+            </div>
+        </div>
+        <div id="lista-fichas"></div>
+    </div>
+
+    <div id="resumo" class="content">
+        <h3>Resumo de Vendas e Lucratividade</h3>
+        <table id="tab-resumo-final">
+            <thead><tr><th>Prato</th><th>Custo Produção</th><th>Markup</th><th>Preço de Venda</th><th>Ação</th></tr></thead>
+            <tbody id="corpo-resumo"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let dadosSistema = JSON.parse(localStorage.getItem('master_v8')) || { insumos: [], pratos: [] };
+
+    const formatBRL = (v) => v.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
+
+    function showTab(id) {
+        document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if(event && event.currentTarget) event.currentTarget.classList.add('active');
+        renderTudo();
+    }
+
+    function addInsumo() {
+        const n = document.getElementById('ing-nome'), u = document.getElementById('ing-un');
+        const p = document.getElementById('ing-preco'), q = document.getElementById('ing-qtd-base');
+        if(!n.value || !p.value || !q.value) return alert("Preencha todos os campos do insumo.");
+        
+        dadosSistema.insumos.push({
+            nome: n.value.toUpperCase(),
+            un: u.value.toUpperCase(),
+            preco: parseFloat(p.value),
+            qtd: parseFloat(q.value),
+            custoUnit: parseFloat(p.value) / parseFloat(q.value)
+        });
+        
+        n.value = ""; u.value = ""; p.value = ""; q.value = "";
+        salvarESincronizar();
+        n.focus();
+    }
+
+    function criarPrato() {
+        const pNome = document.getElementById('p-nome');
+        if(!pNome.value) return alert("Digite o nome do prato.");
+        dadosSistema.pratos.push({ nome: pNome.value.toUpperCase(), markupPorcent: 100, itens: [] });
+        pNome.value = "";
+        salvarESincronizar();
+    }
+
+    function addItemPrato(pIdx) {
+        const sel = document.getElementById(`sel-${pIdx}`), qtd = parseFloat(document.getElementById(`qtd-${pIdx}`).value), tipo = document.getElementById(`tipo-${pIdx}`).value;
+        if(sel.value === "" || isNaN(qtd)) return alert("Selecione o item e a quantidade.");
+        
+        const ins = dadosSistema.insumos[sel.value];
+        let custo = (tipo === 'porcentagem') ? (ins.custoUnit * (ins.qtd * (qtd/100))) : (ins.custoUnit * qtd);
+        
+        dadosSistema.pratos[pIdx].itens.push({ nome: ins.nome, qtdEx: qtd + (tipo === 'porcentagem' ? '%' : ''), total: custo });
+        salvarESincronizar();
+    }
+
+    function renderTudo() {
+        // Insumos
+        document.getElementById('corpo-insumos').innerHTML = dadosSistema.insumos.map((ing, i) => `
+            <tr><td>${ing.nome}</td><td>${ing.un}</td><td>${formatBRL(ing.preco)}</td><td>${formatBRL(ing.custoUnit)}</td>
+            <td><button class="btn btn-del" onclick="removerInsumo(${i})">Remover</button></td></tr>
+        `).join('');
+
+        // Fichas
+        document.getElementById('lista-fichas').innerHTML = dadosSistema.pratos.map((p, pIdx) => {
+            const custoT = p.itens.reduce((acc, it) => acc + it.total, 0);
+            return `
+                <div class="card-prato">
+                    <div class="header-prato"><h2>${p.nome}</h2><button class="btn btn-del" onclick="removerPrato(${pIdx})">Excluir Ficha</button></div>
+                    <div class="grid-inputs">
+                        <select id="sel-${pIdx}"><option value="">Selecionar Insumo...</option>${dadosSistema.insumos.map((ing, i) => `<option value="${i}">${ing.nome}</option>`).join('')}</select>
+                        <select id="tipo-${pIdx}"><option value="unidade">Qtd Real</option><option value="porcentagem">% da Emb.</option></select>
+                        <input type="number" id="qtd-${pIdx}" placeholder="Quanto?">
+                        <button class="btn btn-add" onclick="addItemPrato(${pIdx})">Adicionar</button>
+                    </div>
+                    <table>
+                        <thead><tr><th>Ingrediente</th><th>Uso</th><th>Custo</th><th></th></tr></thead>
+                        <tbody>${p.itens.map((it, iIdx) => `<tr><td>${it.nome}</td><td>${it.qtdEx}</td><td>${formatBRL(it.total)}</td><td><button class="btn btn-del" onclick="removerItemPrato(${pIdx},${iIdx})">x</button></td></tr>`).join('')}</tbody>
+                    </table>
+                    <div class="markup-box"><strong>MARKUP: </strong><input type="number" class="input-inline" value="${p.markupPorcent}" onchange="atualizarMarkup(${pIdx}, this.value)"> %</div>
+                    <div class="venda-box">Custo Total: ${formatBRL(custoT)} | <strong>Venda Sugerida: ${formatBRL(custoT * (1 + (p.markupPorcent/100)))}</strong></div>
+                    <div style="clear:both"></div>
+                </div>
+            `;
+        }).join('');
+
+        // Resumo
+        document.getElementById('corpo-resumo').innerHTML = dadosSistema.pratos.map((p, i) => {
+            const c = p.itens.reduce((acc, it) => acc + it.total, 0);
+            return `<tr><td>${p.nome}</td><td>${formatBRL(c)}</td><td>${p.markupPorcent}%</td><td><strong>${formatBRL(c * (1 + (p.markupPorcent/100)))}</strong></td><td><button class="btn btn-del" onclick="removerPrato(${i})">Remover</button></td></tr>`;
+        }).join('');
+    }
+
+    // Funções de Gerenciamento
+    function removerInsumo(i) { dadosSistema.insumos.splice(i,1); salvarESincronizar(); }
+    function removerPrato(i) { if(confirm("Excluir este prato permanentemente?")) { dadosSistema.pratos.splice(i,1); salvarESincronizar(); } }
+    function removerItemPrato(pIdx, iIdx) { dadosSistema.pratos[pIdx].itens.splice(iIdx,1); salvarESincronizar(); }
+    function atualizarMarkup(i, val) { dadosSistema.pratos[i].markupPorcent = parseFloat(val) || 0; salvarESincronizar(); }
+
+    function salvarESincronizar() {
+        localStorage.setItem('master_v8', JSON.stringify(dadosSistema));
+        renderTudo();
+    }
+
+    // BACKUP TOTAL
+    function exportarTudo() {
+        const blob = new Blob([JSON.stringify(dadosSistema, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `SISTEMA_BACKUP_${new Date().toLocaleDateString().replace(/\//g,'-')}.json`;
+        a.click();
+    }
+
+    function importarTudo(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importado = JSON.parse(e.target.result);
+                if (importado.insumos && importado.pratos) {
+                    dadosSistema = importado;
+                    salvarESincronizar();
+                    alert("Backup restaurado com sucesso em todas as abas!");
+                } else {
+                    alert("Arquivo inválido. Certifique-se de usar o arquivo .json gerado pelo sistema.");
+                }
+            } catch (err) {
+                alert("Erro ao ler o arquivo.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    renderTudo();
+</script>
+</body>
+</html>
